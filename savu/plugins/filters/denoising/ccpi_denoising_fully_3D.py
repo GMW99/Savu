@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-.. module:: A wrapper for CCPi-Regularisation Toolkit for an exact (slower) 3D GPU denoising
+.. module:: A wrapper for CCPi-Regularisation Toolkit for an exact (slower) 3D CPU/GPU denoising
    :platform: Unix
-   :synopsis: GPU modules of CCPi-Regularisation Toolkit (CcpiRegulToolkitCpu)
+   :synopsis: A wrapper for CCPi-Regularisation Toolkit
 
 .. moduleauthor:: Daniil Kazantsev <scientificsoftware@diamond.ac.uk>
 """
@@ -24,13 +24,16 @@ from savu.plugins.plugin import Plugin
 from savu.plugins.driver.multi_threaded_plugin import MultiThreadedPlugin
 from savu.plugins.utils import register_plugin
 
+import numpy as np
 from ccpi.filters.regularisers import ROF_TV, FGP_TV, SB_TV, PD_TV, LLT_ROF, TGV, NDF, Diff4th
 from ccpi.filters.regularisers import PatchSelect, NLTV
 from savu.data.plugin_list import CitationInformation
 
 @register_plugin
-class CcpiDenoisingGpu3d(Plugin, MultiThreadedPlugin):
+class CcpiDenoisingFully3d(Plugin, MultiThreadedPlugin):
     """
+    A wrapper around CCPi-Regularisation Toolkit for an exact (slower and memory hungry) 3D CPU/GPU denoising. \
+    The selection of the methods is the following:
     'ROF_TV': Rudin-Osher-Fatemi Total Variation model;
     'FGP_TV': Fast Gradient Projection Total Variation model;
     'SB_TV': Split Bregman Total Variation model;
@@ -41,23 +44,24 @@ class CcpiDenoisingGpu3d(Plugin, MultiThreadedPlugin):
     'NDF': Nonlinear/Linear Diffusion model (Perona-Malik, Huber or Tukey);
     'DIFF4th': Fourth-order nonlinear diffusion model
 
+    :param device: Select CPU or GPU architecture. Default: 'cpu'.
     :param method: Choose methods |ROF_TV|FGP_TV|SB_TV|NLTV|TGV|LLT_ROF|NDF|Diff4th. Default: 'FGP_TV'.
-    :param reg_par: Regularisation (smoothing) parameter. Default: 0.01.
+    :param reg_par: Regularisation (smoothing) parameter. Default: 0.00001.
     :param max_iterations: Total number of iterations. Default: 300.
     :param time_step: Time marching step, relevant for ROF_TV, LLT_ROF,\
      NDF, Diff4th methods. Default: 0.001.
     :param lipshitz_constant: TGV method, Lipshitz constant. Default: 12.
     :param alpha1: TGV method, parameter to control the 1st-order term. Default: 1.0.
     :param alpha0: TGV method, parameter to control the 2nd-order term. Default: 2.0.
-    :param reg_parLLT: LLT-ROF method, parameter to control the 2nd-order term. Default: 0.05.
+    :param reg_parLLT: LLT-ROF method, parameter to control the 2nd-order term. Default: 0.00005.
     :param penalty_type: NDF method, Penalty type for the duffison, choose from\
     huber, perona, tukey, constr, constrhuber. Default: 'huber'.
-    :param edge_par: NDF and Diff4th methods, noise magnitude parameter. Default: 0.01.
+    :param edge_par: NDF and Diff4th methods, noise magnitude parameter. Default: 0.00001.
     :param tolerance_constant: tolerance constant to stop iterations earlier. Default: 0.0.
     """
 
     def __init__(self):
-        super(CcpiDenoisingGpu3d, self).__init__("CcpiDenoisingGpu3d")
+        super(CcpiDenoisingFully3d, self).__init__("CcpiDenoisingFully3d")
 
     def setup(self):
         in_dataset, out_dataset = self.get_datasets()
@@ -67,7 +71,7 @@ class CcpiDenoisingGpu3d(Plugin, MultiThreadedPlugin):
         out_pData[0].plugin_data_setup('VOLUME_3D', 'single')
 
     def pre_process(self):
-        self.device = 'gpu'
+        self.device =  self.parameters['device']
         if (self.parameters['method'] == 'ROF_TV'):
             # set parameters for the ROF-TV method
             self.pars = {'algorithm': self.parameters['method'], \
@@ -148,9 +152,9 @@ class CcpiDenoisingGpu3d(Plugin, MultiThreadedPlugin):
         return self.pars
 
     def process_frames(self, data):
-        import numpy as np
-        input_temp = np.nan_to_num(data[0])
-        input_temp[input_temp > 10**15] = 0.0
+        input_temp = np.float32(data[0].copy(order='C'))
+        indices = np.where(np.isnan(input_temp))
+        input_temp[indices] = 0.0
         self.pars['input'] = input_temp
         # Running Ccpi-RGLTK modules on GPU
         if (self.parameters['method'] == 'ROF_TV'):

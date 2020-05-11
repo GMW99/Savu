@@ -1,4 +1,4 @@
-# Copyright 2019 Diamond Light Source Ltd.
+# Copyright 2020 Diamond Light Source Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,7 @@
 # limitations under the License.
 
 """
-.. module:: Wrapper for CCPi-Regularisation Toolkit (GPU) for \
-    efficient 2D/3D denoising
+.. module::  A wrapper for CCPi-Regularisation Toolkit for an exact (slower) 3D CPU denoising
    :platform: Unix
    :synopsis: GPU modules of CCPi-Regularisation Toolkit (CcpiRegulToolkitCpu)
 
@@ -124,7 +123,7 @@ class CcpiDenoisingCpu3d(Plugin, MultiThreadedPlugin):
                 penaltyNDF = 4
             if (self.parameters['penalty_type'] == 'constrhuber'):
                 #  Threshold-constrained huber diffusion
-                penaltyNDF = 5                
+                penaltyNDF = 5
             self.pars = {'algorithm': self.parameters['method'], \
                 'regularisation_parameter':self.parameters['reg_par'],\
                 'edge_parameter':self.parameters['edge_par'],\
