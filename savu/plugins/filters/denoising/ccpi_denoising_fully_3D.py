@@ -65,9 +65,68 @@ class CcpiDenoisingFully3d(Plugin, MultiThreadedPlugin):
 
     def setup(self):
         in_dataset, out_dataset = self.get_datasets()
+        # reduce the data as per data_subset parameter
+        self.preview_flag = \
+            self.set_preview(in_dataset[0], self.parameters['preview'])
+
+        axis_labels = in_dataset[0].data_info.get('axis_labels')[0]
+
+        dim_volX, dim_volY, dim_volZ = \
+            self.map_volume_dimensions(in_dataset[0])
+
+        axis_labels = {in_dataset[0]:
+                       [str(dim_volX) + '.voxel_x.voxels',
+                        str(dim_volY) + '.voxel_y.voxels',
+                        str(dim_volZ) + '.voxel_z.voxels']}
+        # specify reconstructed volume dimensions
+        (self.output_size, self.output_size) = self._get_output_size(in_dataset[0])
+        shape = [0]*len(in_dataset[0].get_shape())
+        shape[0] = self.output_size
+        shape[1] = self.output_size
+        shape[2] = self.output_size
+
+        print(shape)
+        # if there are only 3 dimensions then add a fourth for slicing
+        if len(shape) == 3:
+            axis_labels = [0]*4
+            axis_labels[dim_volX] = 'voxel_x.voxels'
+            axis_labels[dim_volY] = 'voxel_y.voxels'
+            axis_labels[dim_volZ] = 'voxel_z.voxels'
+            axis_labels[3] = 'scan.number'
+            shape.append(1)
+
+        if self.parameters['vol_shape'] == 'fixed':
+            shape[dim_volX] = shape[dim_volZ]
+        else:
+            shape[dim_volX] = self.parameters['vol_shape']
+            shape[dim_volZ] = self.parameters['vol_shape']
+
+        if 'resolution' in self.parameters.keys():
+            shape[dim_volX] /= self.parameters['resolution']
+            shape[dim_volZ] /= self.parameters['resolution']
+
+        out_dataset[0].create_dataset(axis_labels=axis_labels,
+                                      shape=tuple(shape))
+        out_dataset[0].add_volume_patterns(dim_volX, dim_volY, dim_volZ)
+
+        ndims = range(len(shape))
+        core_dims = (dim_volX, dim_volY, dim_volZ)
+        slice_dims = tuple(set(ndims).difference(set(core_dims)))
+        out_dataset[0].add_pattern(
+                'VOLUME_3D', core_dims=core_dims, slice_dims=slice_dims)
+
+        # set information relating to the plugin data
         in_pData, out_pData = self.get_plugin_datasets()
-        in_pData[0].plugin_data_setup('VOLUME_3D', 'single')
-        out_dataset[0].create_dataset(in_dataset[0])
+
+        dim = in_dataset[0].get_data_dimension_by_axis_label('rotation_angle')
+        nSlices = in_dataset[0].get_shape()[dim]
+
+        in_pData[0].plugin_data_setup('PROJECTION', nSlices,
+                slice_axis='rotation_angle')
+
+        # in_pData[1].plugin_data_setup('PROJECTION', nSlices) # (for PWLS)
+
+        # set pattern_name and nframes to process for all datasets
         out_pData[0].plugin_data_setup('VOLUME_3D', 'single')
 
     def pre_process(self):
